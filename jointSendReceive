@@ -1,0 +1,95 @@
+//global variables
+var teamhelpTicketingEmailAddress = 'helpdesk@something.org';
+var teamhelpTicketingEmailAddressReply = 'helpdesk+reply@something.org';
+
+function jointSendReceiveEmails(){
+  mainFunction('fromteamhelp'); //,teamhelpTicketingEmailAddress,teamhelpTicketingEmailAddressReply);
+  Logger.log('**********************************');
+  mainFunction('toteamhelp'); //,originalSenderEmail,teamhelpTicketingEmailAddressReply);
+}
+
+function mainFunction(label) {  
+  //this is the label that catches forwards tickets to and from Teamhelp and client's email address
+  var labelFilter = 'label:' + label + ' is:unread';
+  Logger.log('labelFilter is: ' + labelFilter);
+  var msgs = Gmail.Users.Messages.list('me', {q:labelFilter}).messages;
+  Logger.log('msgs is: ' + msgs);
+  if (typeof(msgs) == "undefined") {
+    Logger.log('There are no emails with this label: ' + label)
+  } else if (msgs.length > 0 ) {
+    Logger.log('There are this many emails to process: ' + msgs.length);  
+  msgs.forEach(function (e) {
+    //**** both toteamhelp and tosender ****
+    var toAddress = GmailApp.getMessageById(e.id).getTo();    
+    var from = GmailApp.getMessageById(e.id).getFrom();    
+    var sub = GmailApp.getMessageById(e.id).getSubject(); //**** tosender as well ****
+    var msg = GmailApp.getMessageById(e.id).getBody();
+    var attch = GmailApp.getMessageById(e.id).getAttachments(); 
+    Logger.log('this received emails was sent to: ' + toAddress);
+    Logger.log('this received emails was sent from: ' + from);
+    Logger.log('this received emails subject is: ' + sub);
+    Logger.log('this received emails Message body is: ' + msg);
+    Logger.log('this received emails Attachment status is: ' + attch);
+    //**** both ***
+    var attchStatement = (attch !=null) ? attch : "";  
+    var fromBare = from.match(/[^@<\s\"]+@[^@\s>\"]+/).toString();   
+    //**** only tosender ***
+    var originalSenderEmail = (sub.match(/[^@<\s\"]+@[^@\s>\"]+/) !=null) ? sub.match(/[^@<\s\"]+@[^@\s>\"]+/).toString() : "";
+    var msgToSender = msg.replace(/helpdesk_eurasia@sil.org \[unknown\] wrote:/g,'')
+    .replace(/helpdesk@gmail.com/g,originalSenderEmail)
+    .replace(/support@something.org/g,teamhelpTicketingEmailAddressReply)
+    .replace(/helpdesk@something.org/g,teamhelpTicketingEmailAddressReply); 
+    var toSenderSubject = sub.replace(/\[[A-Za-z0-9]*\] <.*?> /g,''); 
+    //**** only toteamhelp ****
+    var serviceGroupID = '[' + toAddress.match(/[A-Za-z0-9]*(?=@)/) + ']';
+    var toTeamhelpSubject = serviceGroupID + ' <' + fromBare + '> ' + sub;  
+    var msgTeamhelp = '<a href=\"mailto:' + fromBare + '\">' + fromBare + '<\/a>' + ' wrote:\n\n' + msg;
+    
+    Logger.log('attchStatement is: ' + attchStatement);
+    Logger.log('Plain \'From\' Email address is: ' + fromBare);
+    Logger.log('Original Sender Email is: \'' + originalSenderEmail + '\'');
+    Logger.log('Final msg body is: ' + msgToSender);
+    Logger.log('To Sender Subject is: ' + toSenderSubject);
+    Logger.log('Service Group ID is: ' + serviceGroupID);    
+    Logger.log('toTeamhelpSubject is: ' + toTeamhelpSubject);
+    Logger.log('Joined email body is: ' + msgTeamhelp);        
+    //Logger.log(label + ' should be equal to \'scripttesttoteamhelp\'');
+    
+    if (label == 'toteamhelp' && toAddress !== teamhelpTicketingEmailAddressReply) {
+      Logger.log('sending email to teamhelp because label is \'toteamhelp\'')
+      Logger.log('Sending email now to: teamhelpTicketingEmailAddress: ' + teamhelpTicketingEmailAddress);
+      Logger.log('Sending email now subject: toTeamhelpSubject: ' + toTeamhelpSubject);
+      Logger.log('Sending email now replyTo: teamhelpTicketingEmailAddressReply: ' + teamhelpTicketingEmailAddressReply);      
+      MailApp.sendEmail({
+        to: teamhelpTicketingEmailAddress,
+        subject: toTeamhelpSubject,
+        htmlBody: msgTeamhelp,
+        attachments: attchStatement,
+      })      
+    } else if (label == 'toteamhelp' && toAddress == teamhelpTicketingEmailAddressReply) {
+      Logger.log('sending email to teamhelp because label is \'toteamhelp\' - this is a reply')
+      MailApp.sendEmail({
+        to: teamhelpTicketingEmailAddress,
+        subject: sub,
+        htmlBody: msgTeamhelp,
+        attachments: attchStatement,
+      })        
+    } else if (label == 'fromteamhelp') {
+      Logger.log('sending email to original sender because label is \'fromteamhelp\'')
+      Logger.log('Sending email now to: originalSenderEmail: ' + originalSenderEmail);
+      Logger.log('Sending email now subject: toSenderSubject: ' + toSenderSubject);
+      Logger.log('Sending email now replyTo: teamhelpTicketingEmailAddressReply: ' + teamhelpTicketingEmailAddressReply);
+      MailApp.sendEmail({        
+        to: originalSenderEmail,
+        replyTo: teamhelpTicketingEmailAddressReply,
+        subject: toSenderSubject,
+        htmlBody: msgToSender,      
+        attachments: attchStatement,          
+      })     
+    }
+    Logger.log('#########################################') 
+    //marks email unread to ensure that it doesn't get processed more than once
+    GmailApp.getMessageById(e.id).markRead();
+  })
+  }
+}
